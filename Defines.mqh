@@ -24,6 +24,7 @@ enum ENUM_CLOSE_TYPE
     CLOSE_NONE,
     CLOSE_SL,
     CLOSE_TP,
+    CLOSE_MANUAL,
    };
 //+------------------------------------------------------------------+
 //| Structs                                                          |

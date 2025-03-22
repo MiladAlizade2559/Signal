@@ -31,7 +31,8 @@ private:
     int              m_slip;                       // max slip for opening signal
     double           m_commission;                 // commission position
     double           m_swap;                       // swap position
-    double           m_profit;                     // profit position
+    double           m_profit_opened;              // profit positions opened
+    double           m_profit_closed ;             // profit positions closed
     string           m_comment;                    // comment signal
     SSubSignal       m_sub_signals[];              // sub signals array
     SSubSignal       m_sub_positions[];            // sub positions array
@@ -46,20 +47,24 @@ public:
                     ~CSignal(void);
     //--- Functions for controlling data variables
     virtual int      Variables(const ENUM_VARIABLES_FLAGS flag,string &array[],const bool compact_objs = false);
-    ENUM_SIGNAL_TYPE Mode(void)                    {return(m_mode);     }  // get mode signal
-    ulong            Ticket(void)                  {return(m_ticket);   }  // get ticket signal
-    string           Symbol(void)                  {return(m_symbol);   }  // get symbol name signal
-    ENUM_ORDER_TYPE  Type(void)                    {return(m_type);     }  // get order type signal
-    double           Volume(void)                  {return(m_volume);   }  // get volume size signal
-    datetime         Time(void)                    {return(m_time);     }  // get time setting signal
-    double           Price(void)                   {return(m_price);    }  // get price opening signal
-    void             Comment(const string value)   {m_comment = value;  }  // set comment signal
-    string           Comment(void)                 {return(m_comment);  }  // get comment signal
-    double           Profit(void)                  {return(m_profit);   }  // get profit signal
-    int              SetSubSignals(SSubSignal &array[]);
-    int              GetSubSignals(SSubSignal &array[]);
-    int              GetSubPositions(SSubSignal &array[]);
-    int              GetSubHistory(SSubSignal &array[]);
+    ENUM_SIGNAL_TYPE Mode(void)                    {return(m_mode);              }  // get mode signal
+    ulong            Ticket(void)                  {return(m_ticket);            }  // get ticket signal
+    string           Symbol(void)                  {return(m_symbol);            }  // get symbol name signal
+    ENUM_ORDER_TYPE  Type(void)                    {return(m_type);              }  // get order type signal
+    double           Volume(void)                  {return(m_volume);            }  // get volume size signal
+    datetime         Time(void)                    {return(m_time);              }  // get time setting signal
+    double           Price(void)                   {return(m_price);             }  // get price opening signal
+    void             Comment(const string value)   {m_comment = value;           }  // set comment signal
+    string           Comment(void)                 {return(m_comment);           }  // get comment signal
+    double           ProfitOpened(void)            {return(m_profit_opened);     }  // get profit positions opened
+    double           ProfitClosed(void)            {return(m_profit_closed);     }  // get profit positions closed
+    int              SubSignals(SSubSignal &array[]);
+    int              SubPositions(SSubSignal &array[]);
+    int              SubHistory(SSubSignal &array[]);
+    int              SubSignal(SSubSignal &value,const int index = -1);
+    bool             SubSignalDelete(const int index);
+    bool             SubSignalDeletes(void);
+    bool             SubPosition(SSubSignal &value,const int index);
    };
 //+------------------------------------------------------------------+
 //| Constructor                                                      |
@@ -77,30 +82,37 @@ CSignal::~CSignal(void)
    {
    }
 //+------------------------------------------------------------------+
-//| Set sub signals array                                            |
+//| Setting variables                                                |
 //+------------------------------------------------------------------+
-int CSignal::SetSubSignals(SSubSignal &array[])
+int CSignal::Variables(const ENUM_VARIABLES_FLAGS flag,string &array[],const bool compact_objs = false)
    {
-//--- size of array
-    int size = ArraySize(array);
-//--- resize sub signals
-    ArrayResize(m_sub_signals,size);
-//--- reset volume size
-    m_volume = 0;
-//--- set sub signal and updating volume size
-    for(int i = 0; i < size; i++)
-       {
-        m_sub_signals[i] = array[i];
-        m_volume += m_sub_signals[i].Volume;
-       }
-//--- update sub signals total
-    m_sub_signals_total = size;
-    return(m_sub_signals_total);
+    CBase::Variables(flag,array,compact_objs);
+    _enum(m_mode);
+    _ulong(m_ticket);
+    _string(m_symbol);
+    _enum(m_type);
+    _double(m_volume);
+    _datetime(m_time);
+    _double(m_price);
+    _int(m_spread);
+    _int(m_slip);
+    _double(m_commission);
+    _double(m_swap);
+    _double(m_profit_opened);
+    _double(m_profit_closed);
+    _string(m_comment);
+    _struct_array(m_sub_signals);
+    _struct_array(m_sub_positions);
+    _struct_array(m_sub_history);
+    _int(m_sub_signals_total);
+    _int(m_sub_positions_total);
+    _int(m_sub_history_total);
+    return(CBase::Variables(array));
    }
 //+------------------------------------------------------------------+
 //| Get sub signals array                                            |
 //+------------------------------------------------------------------+
-int CSignal::GetSubSignals(SSubSignal &array[])
+int CSignal::SubSignals(SSubSignal &array[])
    {
 //--- resize array
     ArrayResize(array,m_sub_signals_total);
@@ -114,7 +126,7 @@ int CSignal::GetSubSignals(SSubSignal &array[])
 //+------------------------------------------------------------------+
 //| Get sub positions array                                          |
 //+------------------------------------------------------------------+
-int CSignal::GetSubPositions(SSubSignal &array[])
+int CSignal::SubPositions(SSubSignal &array[])
    {
 //--- resize array
     ArrayResize(array,m_sub_positions_total);
@@ -128,7 +140,7 @@ int CSignal::GetSubPositions(SSubSignal &array[])
 //+------------------------------------------------------------------+
 //| Get sub history array                                            |
 //+------------------------------------------------------------------+
-int CSignal::GetSubHistory(SSubSignal &array[])
+int CSignal::SubHistory(SSubSignal &array[])
    {
 //--- resize array
     ArrayResize(array,m_sub_history_total);
@@ -138,5 +150,64 @@ int CSignal::GetSubHistory(SSubSignal &array[])
         array[i] = m_sub_history[i];
        }
     return(m_sub_history_total);
+   }
+//+------------------------------------------------------------------+
+//| Set or update sub signals                                        |
+//+------------------------------------------------------------------+
+int CSignal::SubSignal(SSubSignal &value,const int index = -1)
+   {
+//--- check index
+    if(index >= m_sub_signals_total)
+        return(-1);
+//--- check index
+    if(index < 0)
+       {
+        //--- resize sub signals array
+        ArrayResize(m_sub_signals,m_sub_signals_total + 1);
+        //--- set value to sub signals array
+        m_sub_signals[m_sub_signals_total] = value;
+        //--- update sub signals total
+        m_sub_signals_total++;
+        return(m_sub_signals_total - 1);
+       }
+//--- update sub signal
+    m_sub_signals[index] = value;
+    return(index);
+   }
+//+------------------------------------------------------------------+
+//| Delete sub signal                                                |
+//+------------------------------------------------------------------+
+bool CSignal::SubSignalDelete(const int index)
+   {
+//--- check index
+    if(index >= m_sub_signals_total)
+        return(false);
+//--- remove sub signal
+    if(!ArrayRemove(m_sub_signals,index,1))
+        return(false);
+    m_sub_signals_total --;
+    return(true);
+   }
+//+------------------------------------------------------------------+
+//| Delete sub signals                                               |
+//+------------------------------------------------------------------+
+bool CSignal::SubSignalDeletes(void)
+   {
+//--- remove sub signals
+    if(!ArrayRemove(m_sub_signals,0,WHOLE_ARRAY))
+        return(false);
+    return(true);
+   }
+//+------------------------------------------------------------------+
+//| Set or update sub positions array                                |
+//+------------------------------------------------------------------+
+bool CSignal::SubPosition(SSubSignal &value,const int index)
+   {
+//--- check index
+    if(index >= m_sub_positions_total)
+        return(false);
+//--- update sub position
+    m_sub_positions[index] = value;
+    return(true);
    }
 //+------------------------------------------------------------------+
